@@ -47,9 +47,12 @@ onMounted(() => {
         </el-menu-item>
       </el-menu>
       <div class="app-aside__foot">
-        <div>本地库 {{ dbName }} · v{{ schemaVersion }}</div>
+        <div>本地库 {{ dbName }} · v{{ schemaVersion }} · 承诺队列 v{{ counts.commitmentVersion ?? 0 }}</div>
         <div>
           地块 {{ counts.parcels ?? 0 }} · 罐 {{ counts.tanks ?? 0 }} · 批次 {{ counts.batches ?? 0 }}
+        </div>
+        <div>
+          预约 {{ counts.reservations ?? 0 }} · 待重试 {{ counts.pendingWrites ?? 0 }}
         </div>
         <div>
           读数 {{ counts.readings ?? 0 }} · 作业 {{ counts.operations ?? 0 }} · 品评 {{ counts.tastings ?? 0 }}

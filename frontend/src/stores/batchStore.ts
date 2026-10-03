@@ -1,5 +1,6 @@
 /**
  * 入罐批次 store：维护在罐批次、当前选中批次与地块/罐绑定校验。
+ * 批次直建 / 改绑 / 删除 / 出罐都会改变罐的实际容量，统一联动预约排队重算。
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -10,9 +11,10 @@ import type { BatchRow } from '@/utils/db'
 import {
   assertTankAssignable,
   putBatch,
+  recomputeReservationQueues,
   removeBatch,
   shipBatch as shipBatchRow,
-  updateBatch as updateBatchRow,
+  updateBatchRow,
   updateTank,
   ROW_REVISION
 } from '@/utils/db'
@@ -46,7 +48,7 @@ export const useBatchStore = defineStore('batch', () => {
     currentBatchId.value = id
   }
 
-  /** 入罐登记：先校验罐位可分配，再把罐置为「在用」 */
+  /** 入罐登记：先校验罐位可分配，再把罐置为「在用」，最后重算预约排队 */
   async function createBatch(payload: Omit<Batch, 'id' | 'lastOperationAt'>): Promise<string> {
     error.value = null
     if (!payload.parcelId) throw new Error('请选择地块')
@@ -56,11 +58,13 @@ export const useBatchStore = defineStore('batch', () => {
     const id = createId('batch')
     await putBatch({ ...payload, id, lastOperationAt: null, revision: ROW_REVISION, createdAt: now, updatedAt: now })
     await updateTank(payload.tankId, { state: '在用' })
+    // 实际批次落罐占用容量：排不下的预约退「待复核」
+    await recomputeReservationQueues()
     currentBatchId.value = id
     return id
   }
 
-  /** 改绑罐位：校验新罐可用后再释放旧罐 */
+  /** 改绑罐位：校验新罐可用后再释放旧罐，随后对两个罐的排队统一重算 */
   async function updateBatch(id: string, patch: Partial<Batch>, current: BatchRow): Promise<void> {
     error.value = null
     if (patch.tankId && patch.tankId !== current.tankId) {
@@ -69,6 +73,7 @@ export const useBatchStore = defineStore('batch', () => {
       if (current.tankId) await updateTank(current.tankId, { state: '空闲' })
     }
     await updateBatchRow(id, patch)
+    await recomputeReservationQueues()
   }
 
   async function deleteBatch(id: string): Promise<void> {
@@ -76,7 +81,7 @@ export const useBatchStore = defineStore('batch', () => {
     if (currentBatchId.value === id) currentBatchId.value = null
   }
 
-  /** 出罐：释放罐位并归档批次 */
+  /** 出罐：释放罐位并归档批次（db 层已联动排队重算，待复核单可能补回已承诺） */
   async function ship(id: string): Promise<void> {
     await shipBatchRow(id)
   }

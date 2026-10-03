@@ -348,6 +348,10 @@ watch(
             <el-descriptions-item label="批次/读数">{{ dbCounts.batches ?? 0 }} / {{ dbCounts.readings ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="作业/苹乳">{{ dbCounts.operations ?? 0 }} / {{ dbCounts.mlfs ?? 0 }}</el-descriptions-item>
             <el-descriptions-item label="品评">{{ dbCounts.tastings ?? 0 }}</el-descriptions-item>
+            <el-descriptions-item label="预约/待重试写入">
+              {{ dbCounts.reservations ?? 0 }} / {{ dbCounts.pendingWrites ?? 0 }}
+            </el-descriptions-item>
+            <el-descriptions-item label="承诺队列版本">v{{ dbCounts.commitmentVersion ?? 0 }}</el-descriptions-item>
           </el-descriptions>
           <div class="btn-row">
             <el-button :icon="Download" @click="exportLibrary">导出整库 JSON</el-button>

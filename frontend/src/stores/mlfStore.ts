@@ -8,7 +8,7 @@ import type { Mlf } from '@/types/mlf'
 import { MALIC_DONE_THRESHOLD, MALIC_START_G } from '@/types/mlf'
 import type { FilterModel } from '@/types/filter'
 import type { MlfRow } from '@/utils/db'
-import { putMlf, removeMlf, updateBatch, updateMlf as updateMlfRow, ROW_REVISION } from '@/utils/db'
+import { putMlf, removeMlf, updateBatchRow, updateMlf as updateMlfRow, ROW_REVISION } from '@/utils/db'
 import { createId } from '@/utils/uuid'
 import { queryToFilters } from '@/utils/query'
 import { today } from '@/utils/uuid'
@@ -56,7 +56,7 @@ export const useMlfStore = defineStore('mlf', () => {
         updatedAt: now
       })
     }
-    await updateBatch(batchId, { state: '苹乳发酵' })
+    await updateBatchRow(batchId, { state: '苹乳发酵' })
   }
 
   /**
@@ -71,7 +71,7 @@ export const useMlfStore = defineStore('mlf', () => {
       endDate: done ? today() : ''
     })
     if (done && mlf.state !== '已完成') {
-      await updateBatch(mlf.batchId, { state: '苹乳发酵' })
+      await updateBatchRow(mlf.batchId, { state: '苹乳发酵' })
     }
     return done
   }
@@ -83,7 +83,7 @@ export const useMlfStore = defineStore('mlf', () => {
 
   async function deleteMlf(mlf: MlfRow): Promise<void> {
     await removeMlf(mlf.id)
-    await updateBatch(mlf.batchId, { state: '酒精发酵' })
+    await updateBatchRow(mlf.batchId, { state: '酒精发酵' })
   }
 
   /** 苹乳进度百分比（按初始值线性折算） */

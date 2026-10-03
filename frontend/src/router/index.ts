@@ -1,5 +1,5 @@
 /**
- * 路由表：/parcels、/tanks、/batches、/operations、/mlf、/tasting
+ * 路由表：/parcels、/tanks、/reservations、/batches、/operations、/mlf、/tasting
  * 页面按路由懒加载，构建时自动分包。
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
@@ -7,6 +7,7 @@ import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 export const ROUTES = {
   parcels: '/parcels',
   tanks: '/tanks',
+  reservations: '/reservations',
   batches: '/batches',
   operations: '/operations',
   mlf: '/mlf',
@@ -24,7 +25,8 @@ export interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { path: ROUTES.parcels, label: '地块与品种', icon: '🍇', hint: '地块台账与在罐批次' },
   { path: ROUTES.tanks, label: '发酵罐配置', icon: '🛢️', hint: '罐位状态与占用校验' },
-  { path: ROUTES.batches, label: '入罐与读数', icon: '📈', hint: '入罐登记与发酵读数' },
+  { path: ROUTES.reservations, label: '到厂预约', icon: '📞', hint: '电话抢罐与容量承诺' },
+  { path: ROUTES.batches, label: '入罐与读数', icon: '📈', hint: '到厂入罐与发酵读数' },
   { path: ROUTES.operations, label: '作业编排', icon: '🔁', hint: '倒罐 / 压帽 / 淋皮' },
   { path: ROUTES.mlf, label: '苹乳发酵', icon: '🧪', hint: '苹果酸下降跟踪' },
   { path: ROUTES.tasting, label: '品评与档案', icon: '🍷', hint: '品评调配与导出' }
@@ -43,6 +45,12 @@ const routes: RouteRecordRaw[] = [
     name: 'tanks',
     component: () => import('@/pages/TankBoard.vue'),
     meta: { title: '发酵罐容量配置与罐位看板' }
+  },
+  {
+    path: ROUTES.reservations,
+    name: 'reservations',
+    component: () => import('@/pages/ReservationBoard.vue'),
+    meta: { title: '到厂预约与容量承诺' }
   },
   {
     path: ROUTES.batches,

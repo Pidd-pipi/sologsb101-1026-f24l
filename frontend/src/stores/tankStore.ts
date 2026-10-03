@@ -1,5 +1,6 @@
 /**
  * 发酵罐 store：维护罐位占用、容量筛选条件与占用冲突校验。
+ * 罐位转清洗 / 清洗完成 / 容量调整都会改变可承诺容量，统一触发预约排队重算。
  */
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
@@ -7,7 +8,14 @@ import type { LocationQuery } from 'vue-router'
 import type { Tank, TankState } from '@/types/tank'
 import type { FilterModel } from '@/types/filter'
 import type { BatchRow, TankRow } from '@/utils/db'
-import { assertTankAssignable, putTank, removeTank, updateTank as updateTankRow, ROW_REVISION } from '@/utils/db'
+import {
+  assertTankAssignable,
+  putTank,
+  recomputeReservationQueues,
+  removeTank,
+  updateTank as updateTankRow,
+  ROW_REVISION
+} from '@/utils/db'
 import { createId } from '@/utils/uuid'
 import { queryToFilters } from '@/utils/query'
 
@@ -59,6 +67,10 @@ export const useTankStore = defineStore('tank', () => {
 
   async function updateTank(id: string, patch: Partial<Tank>): Promise<void> {
     await updateTankRow(id, patch)
+    // 容量或罐位变化：已承诺的单可能排不下退回复核
+    if (patch.capacityL !== undefined || patch.state !== undefined) {
+      await recomputeReservationQueues()
+    }
   }
 
   async function deleteTank(id: string): Promise<void> {
@@ -72,6 +84,8 @@ export const useTankStore = defineStore('tank', () => {
       throw new Error('罐位「在用」由入罐批次绑定后自动置位，请到入罐登记页分配批次')
     }
     await updateTankRow(tank.id, { state: next })
+    // 转清洗：已承诺单降到排队中；清洗完成：排队单按序升为已承诺（排不下退待复核）
+    await recomputeReservationQueues()
   }
 
   return {

@@ -8,7 +8,7 @@ import FilterBar from '@/components/common/FilterBar.vue'
 import StageTag from '@/components/common/StageTag.vue'
 import StatBadge from '@/components/common/StatBadge.vue'
 import EmptyPanel from '@/components/common/EmptyPanel.vue'
-import { db, updateBatch, type BatchRow, type ParcelRow, type TankRow } from '@/utils/db'
+import { db, updateBatchRow, recomputeReservationQueues, type BatchRow, type ParcelRow, type ReservationRow, type TankRow } from '@/utils/db'
 import { useIdbTable } from '@/hooks/useIdbTable'
 import { useTankStore } from '@/stores/tankStore'
 import {
@@ -22,6 +22,7 @@ import {
 import type { FilterSelectConfig, FilterModel } from '@/types/filter'
 import { filtersToQuery } from '@/utils/query'
 import { ROUTES } from '@/router'
+import { summarizeTank } from '@/utils/commitment'
 
 const route = useRoute()
 const router = useRouter()
@@ -32,6 +33,7 @@ const { rows: tanks, ready } = useIdbTable<TankRow>(() => db.tanks, {
 })
 const { rows: batches } = useIdbTable<BatchRow>(() => db.batches)
 const { rows: parcels } = useIdbTable<ParcelRow>(() => db.parcels)
+const { rows: reservations } = useIdbTable<ReservationRow>(() => db.reservations)
 
 const selects: FilterSelectConfig[] = [
   { key: 'materials', label: '材质', options: TANK_MATERIALS.map((item) => ({ label: item, value: item })) },
@@ -48,6 +50,23 @@ function batchLabel(batch: BatchRow | null): string {
   if (!batch) return '—'
   const parcel = parcels.value.find((item) => item.id === batch.parcelId)
   return `${parcel ? parcel.name : '未知地块'} · ${batch.volumeL}L`
+}
+
+/** 该罐的容量承诺汇总：实际在罐 / 已承诺预留 / 剩余可承诺 */
+function commitmentOf(tank: TankRow): ReturnType<typeof summarizeTank> {
+  return summarizeTank(tank, batches.value, reservations.value)
+}
+
+/** 该罐占容量的预约（已承诺 / 排队中），排队序号一并展示 */
+function reservationsOn(tank: TankRow): ReservationRow[] {
+  return reservations.value
+    .filter((item) => item.tankId === tank.id && (item.status === '已承诺' || item.status === '排队中'))
+    .sort((a, b) => a.seq - b.seq || a.submittedAt - b.submittedAt)
+}
+
+function reservationLabel(row: ReservationRow): string {
+  const parcel = parcels.value.find((item) => item.id === row.parcelId)
+  return `${parcel ? parcel.name : '未知地块'} · ${row.forecastVolumeL}L`
 }
 
 const filtered = computed(() => {
@@ -168,7 +187,9 @@ async function assignBatch(tank: TankRow): Promise<void> {
     }
     await store.ensureAssignable(tank.id, picked.id)
     await store.updateTank(tank.id, { state: '在用' })
-    await updateBatch(picked.id, { tankId: tank.id })
+    await updateBatchRow(picked.id, { tankId: tank.id })
+    // 批次改绑改变实际容量占用：统一重算预约排队
+    await recomputeReservationQueues()
     ElMessage.success('罐位已分配')
   } catch (error) {
     if (error instanceof Error && error.message) ElMessage.warning(error.message)
@@ -200,6 +221,7 @@ watch(
         <p class="page__subtitle">罐位「在用」由入罐批次绑定后自动置位；重复分配会被拦截并列出占用批次。</p>
       </div>
       <div>
+        <el-button @click="router.push(ROUTES.reservations)">到厂预约</el-button>
         <el-button @click="router.push(ROUTES.batches)">去入罐登记</el-button>
         <el-button type="primary" :icon="Plus" @click="openCreate">新增发酵罐</el-button>
       </div>
@@ -247,10 +269,38 @@ watch(
             <StageTag :value="row.state" />
           </template>
         </el-table-column>
-        <el-table-column label="占用批次" min-width="200">
+        <el-table-column label="占用批次" min-width="180">
           <template #default="{ row }">
             <span v-if="occupancyOf(row.id)">{{ batchLabel(occupancyOf(row.id)) }}</span>
             <span v-else class="muted">未占用</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="容量承诺（L）" min-width="220">
+          <template #default="{ row }">
+            <div class="commit">
+              <span>容量 {{ row.capacityL }}</span>
+              <span class="muted">在罐 {{ commitmentOf(row).actualL }}</span>
+              <span class="muted">预留 {{ commitmentOf(row).reservedL }}</span>
+              <el-tag
+                size="small"
+                :type="commitmentOf(row).freeL < 0 ? 'danger' : commitmentOf(row).freeL === 0 ? 'warning' : 'success'"
+                effect="plain"
+              >
+                可承诺余 {{ commitmentOf(row).freeL }}
+              </el-tag>
+            </div>
+            <div v-if="reservationsOn(row).length > 0" class="commit-list">
+              <el-tag
+                v-for="item in reservationsOn(row)"
+                :key="item.id"
+                size="small"
+                :type="item.status === '排队中' ? 'info' : 'success'"
+                effect="plain"
+                class="commit-tag"
+              >
+                #{{ item.seq }} {{ reservationLabel(item) }} · {{ item.status }}
+              </el-tag>
+            </div>
           </template>
         </el-table-column>
         <el-table-column label="操作" width="320" fixed="right">
@@ -308,5 +358,27 @@ watch(
 <style scoped>
 .full {
   width: 100%;
+}
+
+.commit {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.commit-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 4px;
+}
+
+.commit-tag {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 </style>
