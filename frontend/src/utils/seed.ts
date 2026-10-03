@@ -3,8 +3,8 @@
  * 只在 parcels 表为空时执行，地块 → 发酵罐 → 批次 → 读数/作业/苹乳/品评 三层互相引用，
  * 保证 6 个页面第一次进入都有可点通的内容。函数本身幂等：由调用方判定表是否为空。
  */
-import type { ParcelRow, TankRow, BatchRow, ReadingRow, OperationRow, MlfRow, TastingRow } from './db'
-import { db, ROW_REVISION } from './db'
+import type { ParcelRow, TankRow, BatchRow, ReadingRow, OperationRow, MlfRow, TastingRow, AppointmentRow } from './db'
+import { db, ROW_REVISION, COMMITMENT_VERSION } from './db'
 
 function rev<T>(row: T): T & { revision: number; createdAt: number; updatedAt: number } {
   return { ...row, revision: ROW_REVISION, createdAt: Date.now(), updatedAt: Date.now() }
@@ -117,11 +117,55 @@ const TASTINGS: Array<Omit<TastingRow, 'revision' | 'createdAt' | 'updatedAt'>> 
   }
 ]
 
-/** 灌入演示数据（地块 → 罐 → 批次 → 读数/作业/苹乳/品评） */
+const APPOINTMENTS: Array<Omit<AppointmentRow, 'revision' | 'createdAt' | 'updatedAt'>> = [
+  // F-03（1500L，空闲）：已入罐 b-003 已出罐，实际 0；预约占 1000+400=1400，仅剩 100L
+  {
+    id: 'apt-001',
+    parcelId: 'p-001',
+    tankId: 'tk-003',
+    harvestDate: '2024-09-11',
+    volumeL: 1000,
+    state: '预约中',
+    seq: 1,
+    commitmentVersion: COMMITMENT_VERSION,
+    batchId: null,
+    reviewReason: null,
+    note: '采收队在途，先占 F-03'
+  },
+  {
+    id: 'apt-002',
+    parcelId: 'p-002',
+    tankId: 'tk-003',
+    harvestDate: '2024-09-14',
+    volumeL: 400,
+    state: '预约中',
+    seq: 2,
+    commitmentVersion: COMMITMENT_VERSION,
+    batchId: null,
+    reviewReason: null,
+    note: ''
+  },
+  // F-04（5000L，清洗中）：罐位不可用，预约退回复核
+  {
+    id: 'apt-003',
+    parcelId: 'p-003',
+    tankId: 'tk-004',
+    harvestDate: '2024-09-16',
+    volumeL: 2000,
+    state: '待复核',
+    seq: 1,
+    commitmentVersion: COMMITMENT_VERSION,
+    batchId: null,
+    reviewReason: '罐位清洗中',
+    note: '等罐洗完再排'
+  }
+]
+
+/** 灌入演示数据（地块 → 罐 → 批次 → 读数/作业/苹乳/品评 → 预约） */
 export async function seedDatabase(): Promise<void> {
   await db.transaction(
     'rw',
-    [db.parcels, db.tanks, db.batches, db.readings, db.operations, db.mlfs, db.tastings],
+    [db.parcels, db.tanks, db.batches, db.readings, db.operations, db.mlfs, db.tastings, db.appointments],
     async () => {
       await db.parcels.bulkPut(PARCELS.map(rev))
       await db.tanks.bulkPut(TANKS.map(rev))
@@ -130,6 +174,7 @@ export async function seedDatabase(): Promise<void> {
       await db.operations.bulkPut(OPERATIONS.map(rev))
       await db.mlfs.bulkPut(MLFS.map(rev))
       await db.tastings.bulkPut(TASTINGS.map(rev))
+      await db.appointments.bulkPut(APPOINTMENTS.map(rev))
     }
   )
 }

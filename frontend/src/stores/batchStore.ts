@@ -9,12 +9,14 @@ import type { FilterModel } from '@/types/filter'
 import type { BatchRow } from '@/utils/db'
 import {
   assertTankAssignable,
+  assertCapacityForBatch,
   putBatch,
   removeBatch,
   shipBatch as shipBatchRow,
   updateBatch as updateBatchRow,
   updateTank,
-  ROW_REVISION
+  ROW_REVISION,
+  COMMITMENT_VERSION
 } from '@/utils/db'
 import { createId } from '@/utils/uuid'
 import { queryToFilters } from '@/utils/query'
@@ -46,15 +48,25 @@ export const useBatchStore = defineStore('batch', () => {
     currentBatchId.value = id
   }
 
-  /** 入罐登记：先校验罐位可分配，再把罐置为「在用」 */
+  /** 入罐登记：先校验罐位可分配与容量承诺，再把罐置为「在用」 */
   async function createBatch(payload: Omit<Batch, 'id' | 'lastOperationAt'>): Promise<string> {
     error.value = null
     if (!payload.parcelId) throw new Error('请选择地块')
     if (!payload.tankId) throw new Error('请选择发酵罐')
     await assertTankAssignable(payload.tankId, null)
+    // 容量承诺：实际在罐 + 已预留 + 本次 ≤ 容量
+    await assertCapacityForBatch(payload.tankId, payload.volumeL)
     const now = Date.now()
     const id = createId('batch')
-    await putBatch({ ...payload, id, lastOperationAt: null, revision: ROW_REVISION, createdAt: now, updatedAt: now })
+    await putBatch({
+      ...payload,
+      id,
+      lastOperationAt: null,
+      commitmentVersion: COMMITMENT_VERSION,
+      revision: ROW_REVISION,
+      createdAt: now,
+      updatedAt: now
+    })
     await updateTank(payload.tankId, { state: '在用' })
     currentBatchId.value = id
     return id

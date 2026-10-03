@@ -7,7 +7,15 @@ import type { LocationQuery } from 'vue-router'
 import type { Tank, TankState } from '@/types/tank'
 import type { FilterModel } from '@/types/filter'
 import type { BatchRow, TankRow } from '@/utils/db'
-import { assertTankAssignable, putTank, removeTank, updateTank as updateTankRow, ROW_REVISION } from '@/utils/db'
+import {
+  assertTankAssignable,
+  putTank,
+  removeTank,
+  updateTank as updateTankRow,
+  recalcTankQueue,
+  ROW_REVISION,
+  COMMITMENT_VERSION
+} from '@/utils/db'
 import { createId } from '@/utils/uuid'
 import { queryToFilters } from '@/utils/query'
 
@@ -52,7 +60,14 @@ export const useTankStore = defineStore('tank', () => {
   async function createTank(payload: Omit<Tank, 'id'>): Promise<string> {
     const now = Date.now()
     const id = createId('tank')
-    await putTank({ ...payload, id, revision: ROW_REVISION, createdAt: now, updatedAt: now })
+    await putTank({
+      ...payload,
+      id,
+      commitmentVersion: COMMITMENT_VERSION,
+      revision: ROW_REVISION,
+      createdAt: now,
+      updatedAt: now
+    })
     selectedId.value = id
     return id
   }
@@ -66,12 +81,19 @@ export const useTankStore = defineStore('tank', () => {
     if (selectedId.value === id) selectedId.value = null
   }
 
-  /** 罐位状态流转（空闲 ⇄ 清洗中）；置为「在用」需由批次绑定触发 */
+  /** 罐位状态流转（空闲 ⇄ 清洗中）；置为「在用」需由批次绑定触发。转清洗后重算该罐排队，排不下的预约退回复核 */
   async function changeState(tank: TankRow, next: TankState): Promise<void> {
     if (next === '在用') {
       throw new Error('罐位「在用」由入罐批次绑定后自动置位，请到入罐登记页分配批次')
     }
     await updateTankRow(tank.id, { state: next })
+    if (next === '清洗中') {
+      // 罐位不可用：其下预约中全部退回复核
+      await recalcTankQueue(tank.id)
+    } else if (next === '空闲') {
+      // 清洗完成：腾出容量，恢复排得下的待复核预约
+      await recalcTankQueue(tank.id)
+    }
   }
 
   return {

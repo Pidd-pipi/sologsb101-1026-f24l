@@ -18,6 +18,8 @@ export interface Batch {
   state: BatchState
   /** 最近一次作业时间（由作业完成回写） */
   lastOperationAt: string | null
+  /** 承诺版本号：升级后补承诺再排队（旧数据补 1，新数据随当前承诺版本） */
+  commitmentVersion?: number
 }
 
 export const BATCH_STATES: BatchState[] = ['酒精发酵', '苹乳发酵', '已出罐']

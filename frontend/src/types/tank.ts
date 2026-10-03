@@ -18,6 +18,8 @@ export interface Tank {
   tempControl: TankTempControl
   /** 罐位状态 */
   state: TankState
+  /** 承诺版本号：升级后补承诺再排队（旧数据补 1，新数据随当前承诺版本） */
+  commitmentVersion?: number
 }
 
 /** 罐位占用信息：分配批次时用于冲突校验 */

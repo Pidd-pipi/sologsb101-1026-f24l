@@ -1,11 +1,12 @@
 /**
- * 路由表：/parcels、/tanks、/batches、/operations、/mlf、/tasting
+ * 路由表：/parcels、/appointments、/tanks、/batches、/operations、/mlf、/tasting
  * 页面按路由懒加载，构建时自动分包。
  */
 import { createRouter, createWebHistory, type RouteRecordRaw } from 'vue-router'
 
 export const ROUTES = {
   parcels: '/parcels',
+  appointments: '/appointments',
   tanks: '/tanks',
   batches: '/batches',
   operations: '/operations',
@@ -23,6 +24,7 @@ export interface NavItem {
 /** 侧边导航配置（与路由一一对应） */
 export const NAV_ITEMS: NavItem[] = [
   { path: ROUTES.parcels, label: '地块与品种', icon: '🍇', hint: '地块台账与在罐批次' },
+  { path: ROUTES.appointments, label: '到厂预约', icon: '📅', hint: '采收量先占罐，容量承诺' },
   { path: ROUTES.tanks, label: '发酵罐配置', icon: '🛢️', hint: '罐位状态与占用校验' },
   { path: ROUTES.batches, label: '入罐与读数', icon: '📈', hint: '入罐登记与发酵读数' },
   { path: ROUTES.operations, label: '作业编排', icon: '🔁', hint: '倒罐 / 压帽 / 淋皮' },
@@ -37,6 +39,12 @@ const routes: RouteRecordRaw[] = [
     name: 'parcels',
     component: () => import('@/pages/ParcelList.vue'),
     meta: { title: '地块与品种台账' }
+  },
+  {
+    path: ROUTES.appointments,
+    name: 'appointments',
+    component: () => import('@/pages/AppointmentBoard.vue'),
+    meta: { title: '到厂预约与容量承诺' }
   },
   {
     path: ROUTES.tanks,
